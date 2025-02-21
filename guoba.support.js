@@ -985,6 +985,16 @@ export function supportGuoba () {
           component: 'Input'
         },
         {
+          field: 'masterPrompt',
+          label: '伪人主人预设',
+          component: 'Input'
+        },
+        {
+          field: 'masterQQ',
+          label: '主人QQ',
+          component: 'Input'
+        },
+        {
           field: 'bymFuckPrompt',
           label: '伪人模式骂人反击的设定词',
           component: 'Input'
