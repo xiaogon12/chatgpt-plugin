@@ -1,15 +1,15 @@
-import { Config } from '../utils/config.js'
+Import { Config } from '../utils/config.js'
 import { getChatHistoryGroup } from '../utils/chat.js'
 import { convertFaces } from '../utils/face.js'
 import { customSplitRegex, filterResponseChunk } from '../utils/text.js'
 import core, { roleMap } from '../model/core.js'
-import { formatDate } from '../utils/common.js'
+import { formatDate } from '../utils/common.js' // 保留 formatDate 导入
 
 export class bym extends plugin {
   constructor () {
     super({
-      name: 'ChatGPT-Plugin 伪人bym',
-      dsc: 'bym',
+      name: 'ChatGPT-Plugin 伪人bym (增强主人认知 + 真·概率回复)', //  更正插件名称
+      dsc: 'bym 增强主人认知 + 真·概率回复', // 更正插件描述
       /** https://oicqjs.github.io/oicq/#events */
       event: 'message',
       priority: 5000,
@@ -27,11 +27,13 @@ export class bym extends plugin {
   /** 复读 */
   async bym (e) {
     if (!Config.enableBYM) {
+      logger.info('bym 插件未启用，跳过'); // 添加日志
       return false
     }
 
     // 伪人禁用群
     if (Config.bymDisableGroup?.includes(e.group_id?.toString())) {
+      logger.info(`群组 ${e.group_id} 在禁用列表中，跳过`); // 添加日志
       return false
     }
 
@@ -39,13 +41,10 @@ export class bym extends plugin {
     let card = e.sender.card || e.sender.nickname
     let group = e.group_id
     let prop = Math.floor(Math.random() * 100)
+    let forceReply = false; // 使用布尔变量代替 prop = -1
     if (Config.assistantLabel && e.msg?.includes(Config.assistantLabel)) {
-      prop = -1
+      forceReply = true; //  使用布尔变量表示强制回复
     }
-    // 去掉吧 频率有点逆天
-    // if (e.msg?.endsWith('？')) {
-    //   prop = prop / 10
-    // }
 
     let fuck = false
     let candidate = Config.bymPreset
@@ -53,23 +52,40 @@ export class bym extends plugin {
       fuck = true
       candidate = candidate + Config.bymFuckPrompt
     }
-    if (prop < Config.bymRate) {
-      logger.info('random chat hit')
-      // let chats = await getChatHistoryGroup(e, Config.groupContextLength)
-      let system = `你的名字是“${Config.assistantLabel}”，你在一个qq群里，群号是${group},当前和你说话的人群名片是${card}, qq号是${sender}, 请你结合用户的发言和聊天记录作出回应，要求表现得随性一点，最好参与讨论，混入其中。不要过分插科打诨，不知道说什么可以复读群友的话。要求你做搜索、发图、发视频和音乐等操作时要使用工具。不可以直接发[图片]这样蒙混过关。要求优先使用中文进行对话。如果此时不需要自己说话，可以只回复<EMPTY>` +
-        candidate +
-        `\n你的回复应该尽可能简练，像人类一样随意，不要附加任何奇怪的东西，如聊天记录的格式（比如${Config.assistantLabel}：），禁止重复聊天记录。`
 
+    //  -----  主人认知增强 + 真·概率回复 修改  -----
+    let systemPrompt = '';
+    const isMaster = Config.masterQQ && e.sender.user_id.toString() === Config.masterQQ.toString() // 判断是否主人
+
+    if (forceReply || prop < Config.bymRate) { // 使用 forceReply 布尔变量和概率条件
+      if (isMaster) {
+        // 如果是主人 **且概率命中 或 强制回复**，应用主人 Prompt
+        logger.info('主人消息，概率命中或强制回复，应用主人 Prompt') //  更准确的日志
+        systemPrompt = `你的名字是“${Config.assistantLabel}”，你是群 ${group} 的群友，群里大家都称呼你 ${Config.assistantLabel}。现在你的主人 ${card} (QQ号: ${sender}) 正在和你说话。你需要认真、详细地回应主人的问题和指示。${Config.masterPrompt || ''}  你的回复应该尽可能详细和准确，充分理解主人的意图。 当主人指示你进行搜索、发图、发视频和音乐等操作时，务必使用工具，不要直接回复 [图片] 或 [视频] 等占位符。优先使用中文进行对话。如果此时不需要自己说话，可以只回复<EMPTY>`; //  **修改：移除了  `+ candidate`**
+      } else {
+        // 如果是群友且命中随机回复概率或强制回复
+        logger.info('群友消息，随机聊天命中或强制回复')
+        systemPrompt = `你的名字是“${Config.assistantLabel}”，你在一个qq群里，群号是${group},当前和你说话的人群名片是${card}, qq号是${sender}。你现在正在和群友 ${card} (QQ号: ${sender}) 聊天。 请你结合用户的发言和聊天记录作出回应，表现得像一个友善、随和的群友，积极参与群聊讨论，融入群体的氛围中。可以适当复读群友的话，或者开一些轻松的玩笑，但注意不要过分插科打诨。  在被群友要求进行搜索、发图、发视频和音乐等操作时，要使用工具不可以直接发[图片]这样蒙混过关，如果要发图片，请使用工具搜索并发送真实的图片。要求优先使用中文进行对话。如果此时不需要自己说话，可以只回复<EMPTY>` + candidate + //  **保持不变：保留 `+ candidate`**
+          `\n你的回复应该尽可能简练，像人类一样随意，符合群聊的口语习惯，不要附加任何奇怪的东西，如聊天记录的格式（比如${Config.assistantLabel}：），禁止重复聊天记录。你是群里的普通一员，和大家平等交流。**如果群友问到关于你的主人的问题（例如“${Config.masterQQ}是谁”，“你和${Config.masterQQ}是什么关系”），请你在群友的随和语气下，自然地表达你对主人的尊重和喜爱，但避免使用过分正式或“主仆”的语气，保持群聊的轻松氛围。 你可以简单地描述你和主人的关系，例如“他是我的主人呀，对我很好”，“他是我的重要的人”，“我听他的”等等。  避免透露过多关于主人的私人信息，除非主人明确允许。**`; // **添加的新指令在这里**
+      }
+
+    } else {
+      logger.info('未命中概率或非强制回复，跳过'); // 添加日志
+      return false // 不符合概率，不触发伪人回复
+    }
+    //  -----  主人认知增强 + 真·概率回复 修改 结束 -----
+
+    if (systemPrompt) { // 只有当 systemPrompt 不为空时才进行后续处理
       let rsp = await core.sendMessage(e.msg, {}, Config.bymMode, e, {
         enableSmart: Config.smartMode,
         system: {
-          api: system,
-          qwen: system,
-          bing: system,
-          claude: system,
-          claude2: system,
-          gemini: system,
-          xh: system
+          api: systemPrompt, // 使用 systemPrompt 变量
+          qwen: systemPrompt,
+          bing: systemPrompt,
+          claude: systemPrompt,
+          claude2: systemPrompt,
+          gemini: systemPrompt,
+          xh: systemPrompt
         },
         settings: {
           replyPureTextCallback: msg => {
@@ -94,6 +110,7 @@ export class bym extends plugin {
         }
         let finalMsg = await convertFaces(t, true, e)
         logger.info(JSON.stringify(finalMsg))
+        logger.info('最终发送消息:', finalMsg); // 添加最终发送消息的日志
         finalMsg = finalMsg.map(filterResponseChunk).filter(i => !!i)
         if (finalMsg && finalMsg.length > 0) {
           if (Math.floor(Math.random() * 100) < 10) {
