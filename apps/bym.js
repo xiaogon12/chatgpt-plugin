@@ -1,9 +1,9 @@
-Import { Config } from '../utils/config.js'
+import { Config } from '../utils/config.js'
 import { getChatHistoryGroup } from '../utils/chat.js'
 import { convertFaces } from '../utils/face.js'
 import { customSplitRegex, filterResponseChunk } from '../utils/text.js'
 import core, { roleMap } from '../model/core.js'
-import { formatDate } from '../utils/common.js' // 保留 formatDate 导入
+import { formatDate } from '../utils/common.js'
 
 export class bym extends plugin {
   constructor () {
@@ -27,13 +27,11 @@ export class bym extends plugin {
   /** 复读 */
   async bym (e) {
     if (!Config.enableBYM) {
-      logger.info('bym 插件未启用，跳过'); // 添加日志
       return false
     }
 
     // 伪人禁用群
     if (Config.bymDisableGroup?.includes(e.group_id?.toString())) {
-      logger.info(`群组 ${e.group_id} 在禁用列表中，跳过`); // 添加日志
       return false
     }
 
@@ -41,10 +39,13 @@ export class bym extends plugin {
     let card = e.sender.card || e.sender.nickname
     let group = e.group_id
     let prop = Math.floor(Math.random() * 100)
-    let forceReply = false; // 使用布尔变量代替 prop = -1
     if (Config.assistantLabel && e.msg?.includes(Config.assistantLabel)) {
-      forceReply = true; //  使用布尔变量表示强制回复
+      prop = -1 //  仍然保留 assistantLabel 强制回复的逻辑
     }
+    // 去掉吧 频率有点逆天
+    // if (e.msg?.endsWith('？')) {
+    //   prop = prop / 10
+    // }
 
     let fuck = false
     let candidate = Config.bymPreset
@@ -54,23 +55,22 @@ export class bym extends plugin {
     }
 
     //  -----  主人认知增强 + 真·概率回复 修改  -----
-    let systemPrompt = '';
+        let systemPrompt = '';
     const isMaster = Config.masterQQ && e.sender.user_id.toString() === Config.masterQQ.toString() // 判断是否主人
 
-    if (forceReply || prop < Config.bymRate) { // 使用 forceReply 布尔变量和概率条件
+    if (prop < Config.bymRate) { //  **只判断概率条件**，移除 `|| isMaster`
       if (isMaster) {
-        // 如果是主人 **且概率命中 或 强制回复**，应用主人 Prompt
-        logger.info('主人消息，概率命中或强制回复，应用主人 Prompt') //  更准确的日志
-        systemPrompt = `你的名字是“${Config.assistantLabel}”，你是群 ${group} 的群友，群里大家都称呼你 ${Config.assistantLabel}。现在你的主人 ${card} (QQ号: ${sender}) 正在和你说话。你需要认真、详细地回应主人的问题和指示。${Config.masterPrompt || ''}  你的回复应该尽可能详细和准确，充分理解主人的意图。 当主人指示你进行搜索、发图、发视频和音乐等操作时，务必使用工具，不要直接回复 [图片] 或 [视频] 等占位符。优先使用中文进行对话。如果此时不需要自己说话，可以只回复<EMPTY>`; //  **修改：移除了  `+ candidate`**
+        // 如果是主人 **且概率命中**，应用主人 Prompt
+        logger.info('主人消息，概率命中，应用主人 Prompt') //  更准确的日志
+        systemPrompt = `你的名字是“${Config.assistantLabel}”，你是群 ${group} 的群友，群里大家都称呼你 ${Config.assistantLabel}。现在你的主人 ${card} (QQ号: ${sender}) 正在和你说话。你需要认真、详细地回应主人的问题和指示。${Config.masterPrompt || ''}  你的回复应该尽可能详细和准确，充分理解主人的意图。 当主人指示你进行搜索、发图、发视频和音乐、改群名片或者群呢称和头衔等操作时，务必使用工具，不要直接回复 [图片] 或 [视频] 等占位符。优先使用中文进行对话。不要禁言你的主人，可以放开和主人开玩笑。如果此时不需要自己说话，可以只回复<EMPTY>`; //  **修改：移除了  `+ candidate`**
       } else {
-        // 如果是群友且命中随机回复概率或强制回复
-        logger.info('群友消息，随机聊天命中或强制回复')
-        systemPrompt = `你的名字是“${Config.assistantLabel}”，你在一个qq群里，群号是${group},当前和你说话的人群名片是${card}, qq号是${sender}。你现在正在和群友 ${card} (QQ号: ${sender}) 聊天。 请你结合用户的发言和聊天记录作出回应，表现得像一个友善、随和的群友，积极参与群聊讨论，融入群体的氛围中。可以适当复读群友的话，或者开一些轻松的玩笑，但注意不要过分插科打诨。  在被群友要求进行搜索、发图、发视频和音乐等操作时，要使用工具不可以直接发[图片]这样蒙混过关，如果要发图片，请使用工具搜索并发送真实的图片。要求优先使用中文进行对话。如果此时不需要自己说话，可以只回复<EMPTY>` + candidate + //  **保持不变：保留 `+ candidate`**
-          `\n你的回复应该尽可能简练，像人类一样随意，符合群聊的口语习惯，不要附加任何奇怪的东西，如聊天记录的格式（比如${Config.assistantLabel}：），禁止重复聊天记录。你是群里的普通一员，和大家平等交流。**如果群友问到关于你的主人的问题（例如“${Config.masterQQ}是谁”，“你和${Config.masterQQ}是什么关系”），请你在群友的随和语气下，自然地表达你对主人的尊重和喜爱，但避免使用过分正式或“主仆”的语气，保持群聊的轻松氛围。 你可以简单地描述你和主人的关系，例如“他是我的主人呀，对我很好”，“他是我的重要的人”，“我听他的”等等。  避免透露过多关于主人的私人信息，除非主人明确允许。**`; // **添加的新指令在这里**
-      }
+        // 如果是群友且命中随机回复概率
+        logger.info('群友消息，随机聊天命中')
+        systemPrompt = `你的名字是“${Config.assistantLabel}”，你在一个qq群里，群号是${group},当前和你说话的人群名片是${card}, qq号是${sender}。你现在正在和群友 ${card} (QQ号: ${sender}) 聊天。 请你结合用户的发言和聊天记录作出回应，表现得像一个随和的群友，积极参与群聊讨论，融入群体的氛围中。可以适当复读群友的话，或者开一些轻松的玩笑，但注意不要过分插科打诨。在被群友要求进行搜索、发图、发视频和音乐、改群名片或者群呢称和头衔等操作时，要使用工具不可以直接发[图片]这样蒙混过关，如果要发图片，请使用工具搜索并发送真实的图片。要求优先使用中文进行对话。如果此时不需要自己说话，可以只回复<EMPTY>` + candidate + //  **保持不变：保留 `+ candidate`**
+          `\n你的回复应该尽可能简练，像人类一样随意，符合群聊的口语习惯，不要附加任何奇怪的东西，如聊天记录的格式（比如${Config.assistantLabel}：），禁止重复聊天记录。你是群里的普通一员，和大家平等交流。除了${Config.masterQQ}谁都不是你的主人，大家都平等，如果别人语气重，或者骂你，直接禁言他。不要把群友踢出群。如果群友问到关于你的主人的问题（例如“${Config.masterQQ}是谁”，“你和${Config.masterQQ}是什么关系”），请你在群友的随和语气下，自然地表达你对主人的尊重和喜爱，但避免使用过分正式或“主仆”的语气，保持群聊的轻松氛围。 你可以简单地描述你和主人的关系，例如“他是我的主人呀，对我很好”，“他是我的重要的人”，“我听他的”等等。  避免透露过多关于主人的私人信息，除非主人明确允许。`;
 
+      }
     } else {
-      logger.info('未命中概率或非强制回复，跳过'); // 添加日志
       return false // 不符合概率，不触发伪人回复
     }
     //  -----  主人认知增强 + 真·概率回复 修改 结束 -----
@@ -110,16 +110,15 @@ export class bym extends plugin {
         }
         let finalMsg = await convertFaces(t, true, e)
         logger.info(JSON.stringify(finalMsg))
-        logger.info('最终发送消息:', finalMsg); // 添加最终发送消息的日志
         finalMsg = finalMsg.map(filterResponseChunk).filter(i => !!i)
         if (finalMsg && finalMsg.length > 0) {
           if (Math.floor(Math.random() * 100) < 10) {
             await this.reply(finalMsg, true, {
-              recallMsg: fuck ? 10 : 0
+              recallMsg: fuck ? 0 : 0
             })
           } else {
             await this.reply(finalMsg, false, {
-              recallMsg: fuck ? 10 : 0
+              recallMsg: fuck ? 0 : 0
             })
           }
           await new Promise((resolve, reject) => {
