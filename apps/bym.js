@@ -56,8 +56,7 @@ export class bym extends plugin {
 
     //  -----  主人认知增强 + 真·概率回复 修改  -----
         let systemPrompt = '';
-    const isMaster = Config.masterQQ && e.sender.user_id.toString() === Config.masterQQ.toString() // 判断是否主人
-
+    const isMaster = e.isMaster // 判断是否是主人
     if (prop < Config.bymRate) { //  **只判断概率条件**，移除 `|| isMaster`
       if (isMaster) {
         // 如果是主人 **且概率命中**，应用主人 Prompt
