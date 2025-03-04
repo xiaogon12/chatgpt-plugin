@@ -1,7 +1,7 @@
-import { AbstractTool } from './AbstractTool.js'
+import { AbstractTool } from './AbstractTool.js';
 
 export class APTool extends AbstractTool {
-  name = 'draw'
+  name = 'draw';
 
   parameters = {
     properties: {
@@ -11,37 +11,32 @@ export class APTool extends AbstractTool {
       }
     },
     required: []
-  }
+  };
 
-  description = 'Useful when you want to draw picture'
+  description = 'Useful when you want to draw picture';
 
   func = async function (opts, e) {
-    let { prompt } = opts
+    let { prompt } = opts;
     if (e.at === e.bot.uin) {
-      e.at = null
+      e.at = null;
     }
-    e.atBot = false
-    let ap
+    e.atBot = false;
+    let ap;
     try {
-      // eslint-disable-next-line camelcase
-      let { Ai_Painting } = await import('../../../ap-plugin/apps/aiPainting.js')
-      ap = new Ai_Painting(e)
+      // 导入新的绘图插件
+      const { aiht } = await import('../../../earth-k-plugin/apps/NovelAI-Painting.js');
+      ap = new aiht();
     } catch (err) {
-      try {
-        // ap的dev分支改名了
-        // eslint-disable-next-line camelcase
-        let { Ai_Painting } = await import('../../../ap-plugin/apps/ai_painting.js')
-        ap = new Ai_Painting(e)
-      } catch (err1) {
-        return 'the user didn\'t install ap-plugin. suggest him to install'
-      }
+      return 'the user didn\'t install earth-k-plugin. suggest him to install';
     }
     try {
-      e.msg = '#绘图' + prompt
-      await ap.aiPainting(e)
-      return 'draw success, picture has been sent.'
+      // 构造消息
+      e.msg = '#绘个图' + prompt;
+      // 调用绘图方法
+      await ap.huatu2(e);
+      return 'draw success, picture has been sent.';
     } catch (err) {
-      return 'draw failed due to unknown error'
+      return 'draw failed due to unknown error';
     }
-  }
+  };
 }
